@@ -4,69 +4,116 @@
       <div class="input-wrapper">
         <Textarea v-model="textInput" rows="6" autoResize cols="30" placeholder="Enter your text here"/>
       </div>
-      <Button label="Translate" @click="translateAndSave"/>
+      <Button label="Translate" @click="processWords"/>
+      <div v-if="loading">Translate in progress, please wait...</div>
     </section>
-    <div v-if="translatedText">
+    <section class="translations" v-if="words.length > 0">
       <h3>Translation:</h3>
-      <p>{{ translatedText }}</p>
-      <Button label="Listen" @click="playAudio"/>
-    </div>
+      <ul>
+        <li v-for="(word, index) in words" :key="index">
+          {{ word.english }} - {{ word.russian }}
+        </li>
+      </ul>
+      <Button class="translations-btn" label="Listen" @click="speakWords"/>
+    </section>
   </main>
 </template>
-
 <script setup>
+import {ref, onMounted} from 'vue';
 import Textarea from 'primevue/textarea';
 import Button from 'primevue/button';
-import {ref} from 'vue';
+import {getFirestore, collection, getDocs, addDoc} from 'firebase/firestore';
 import {db} from '../firebase';
-import {collection, addDoc} from "firebase/firestore";
+import axios from 'axios';
 
+const words = ref([]);
 const textInput = ref('');
-const translatedText = ref('');
+const translatedWords = ref([]);
+const loading = ref(false);
 
-async function translateText(text, targetLang) {
-  const response = await fetch('https://libretranslate.com/translate', {
-    method: 'POST',
-    body: JSON.stringify({
-      q: text,
-      source: targetLang === 'en' ? 'ru' : 'en',
-      target: targetLang,
-    }),
-    headers: {'Content-Type': 'application/json'},
-  });
-  const result = await response.json();
-  return result.translatedText;
-}
-
-function speakText(text, lang) {
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = lang === 'en' ? 'en-US' : 'ru-RU';
-  window.speechSynthesis.speak(utterance);
-}
-
-const translateAndSave = async (ev) => {
-  console.log(textInput.value)
-  if (textInput.value.trim().length > 0) {
-    const targetLang = /^[а-яА-Я]/.test(textInput.value) ? 'en' : 'ru';
-    translatedText.value = await translateText(textInput.value, targetLang);
-
-    // Save to Firebase
-    await addDoc(collection(db, targetLang === 'en' ? 'english-to-russian' : 'russian-to-english'), {
-      original: textInput.value,
-      translated: translatedText.value,
-    });
+const fetchWords = async () => {
+  try {
+    const querySnapshot = await getDocs(collection(db, 'words'));
+    words.value = querySnapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
+  } catch (error) {
+    console.error('Error fetching words:', error);
   }
 };
 
-const playAudio = () => {
-  speakText(translatedText.value, /^[а-яА-Я]/.test(textInput.value) ? 'en' : 'ru');
+const speakWords = () => {
+  words.value.forEach(word => {
+    const englishMsg = new SpeechSynthesisUtterance(word.english);
+    englishMsg.lang = 'en-US';
+    window.speechSynthesis.speak(englishMsg);
+
+    const russianMsg = new SpeechSynthesisUtterance(word.russian);
+    russianMsg.lang = 'ru-RU';
+    window.speechSynthesis.speak(russianMsg);
+  });
 };
+
+const processWords = async () => {
+  if (!textInput.value.trim()) return;
+
+  const wordsArray = textInput.value.split(/\s+/).slice(0, 100);
+  loading.value = true;
+
+  for (const word of wordsArray) {
+    try {
+      const response = await axios.post('https://libretranslate.com/translate', {
+        q: word,
+        source: 'en',
+        target: 'ru',
+        format: 'text'
+      }, {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const translatedWord = {
+        english: word,
+        russian: response.data.translatedText
+      };
+
+      await addDoc(collection(db, 'words'), translatedWord);
+      translatedWords.value.push(translatedWord);
+      fetchWords();
+    } catch (error) {
+      console.error(`Ошибка при переводе слова "${word}":`, error);
+    }
+  }
+
+  textInput.value = '';
+  loading.value = false;
+};
+
+// Загружаем слова при монтировании компонента
+onMounted(() => {
+  fetchWords();
+});
 </script>
+
 <style scoped>
 .main {
   max-width: 800px;
   width: 100%;
   height: fit-content;
+
+  section {
+    margin-bottom: 60px;
+  }
+
+  button {
+    min-width: 90px;
+    display: flex;
+    justify-content: center;
+  }
+
+  textarea {
+    resize: none;
+    width: 100%;
+  }
 
   .input-words {
     padding: 20px;
@@ -78,9 +125,12 @@ const playAudio = () => {
     margin-bottom: 10px;
   }
 
-  textarea {
-    resize: none;
-    width: 100%;
+  .translations {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 20px;
+    gap: 20px;
   }
 }
 </style>
