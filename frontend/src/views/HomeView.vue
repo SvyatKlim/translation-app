@@ -30,6 +30,7 @@ const words = ref([]);
 const textInput = ref('');
 const translatedWords = ref([]);
 const loading = ref(false);
+const apiKey = import.meta.env.VITE_DEEPL_API_KEY;
 
 const fetchWords = async () => {
   try {
@@ -60,22 +61,17 @@ const processWords = async () => {
 
   for (const word of wordsArray) {
     try {
-      const response = await axios.post('https://libretranslate.com/translate', {
-        q: word,
-        source: 'en',
-        target: 'ru',
-        format: 'text'
-      }, {
-        headers: {
-          'Content-Type': 'application/json'
-        }
+      const response = await axios.post('http://localhost:3000/translate', {
+        text: word,
+        target_lang: 'RU'
       });
 
       const translatedWord = {
         english: word,
-        russian: response.data.translatedText
+        russian: response.data.translations[0].text
       };
 
+      // Сохранение в Firebase
       await addDoc(collection(db, 'words'), translatedWord);
       translatedWords.value.push(translatedWord);
       fetchWords();
@@ -87,6 +83,8 @@ const processWords = async () => {
   textInput.value = '';
   loading.value = false;
 };
+
+
 
 // Загружаем слова при монтировании компонента
 onMounted(() => {
