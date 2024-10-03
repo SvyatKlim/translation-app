@@ -15,14 +15,10 @@ app.use(cors({
 }));app.use(express.json());
 app.post('/translate', async (req, res) => {
     const { text, target_lang } = req.body;
-    // Проверка на пустые строки
-    // if (!text || (Array.isArray(text) && text.length === 0) || (typeof text === 'string' && text.trim() === '')) {
-    //     return res.status(400).json({ error: 'Параметр "text" должен быть непустой строкой или массивом непустых строк.' });
-    // }
-
+    console.log('req.body', req.body)
     try {
         const result = await translator.translateText(text, null, target_lang);
-        res.json(result.text);
+        res.json({translation: result.text});
     } catch (error) {
         console.error('Ошибка при переводе:', error.message); // Выводим сообщение об ошибке
         res.status(500).json({ error: 'Ошибка при запросе к API DeepL', details: error.message }); // Отправляем клиенту сообщение об ошибке

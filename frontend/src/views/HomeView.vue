@@ -68,13 +68,13 @@ const processWords = async () => {
 
       const translatedWord = {
         english: word,
-        russian: response.data.translations[0].text
+        russian: response.data.translation
       };
 
       // Сохранение в Firebase
       await addDoc(collection(db, 'words'), translatedWord);
       translatedWords.value.push(translatedWord);
-      fetchWords();
+      await fetchWords();
     } catch (error) {
       console.error(`Ошибка при переводе слова "${word}":`, error);
     }
